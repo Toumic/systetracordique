@@ -11,6 +11,20 @@ from typing import Callable
 # lino() Pour consulter le programme grâce au suivi des print’s
 lineno: Callable[[], int] = lambda: inspect.currentframe().f_back.f_lineno
 
+# --- dictionnaires visibles depuis l’extérieur ---
+union_t = {}
+ponton_t = {}
+super_t = {}
+infer_t = {}
+
+# Déclaration des nécessités.
+n_gam = []
+e_gam = []
+t_inf = []
+t_sup = []
+t_global = {}
+t_ordre = {}
+
 
 def print_hi():
     """Traité des tétracordes avec comme unique base une liste de tuples (nom_gam, mod_num).
@@ -172,6 +186,7 @@ def print_hi():
     }
     (lineno(), "di_ages", di_ages)
     # 173 di_ages {1: ['123400000567', '123000004567', '120000034567', '100000234567',...]}
+    global n_gam, e_gam, t_inf, t_sup, t_global, t_ordre
     n_gam = [n for n, _ in k_gam]  # Liste les noms des gammes.
     e_gam = [e for _, e in k_gam]  # Liste les gammes énumérées.
     ("n_gam", n_gam, len(n_gam), "\ne_gam", e_gam, len(e_gam))
@@ -180,7 +195,7 @@ def print_hi():
     # La séquence des gammes de di_ages est la même que celle de e_gam.
     "# Collecte des tétras inférieurs et supérieurs de chaque gamme"
     t_inf, t_sup = [], []  # Listes : tétras[inf, sup].
-    union_t, ponton_t, super_t, infer_t = {}, {}, {}, {}  # , union_t[int, sup], ponton_t[int-sup], super_t[sup] unic
+    # union_t, ponton_t, super_t, infer_t = {}, {}, {}, {}  # , union_t[int, sup], ponton_t[int-sup], super_t[sup] unic
     t_global = {}  # Dictionnaire des localisations tétras.
     for e_num in e_gam:
         nom = n_gam[e_gam.index(e_num)] + "_"
@@ -248,7 +263,7 @@ def print_hi():
             super_t[i_sup] = i_sup
             union_t[i_sup] = i_sup
             (lineno(), "if i_sup in t_inf ", i_sup)
-    ("\n", "union", union_t, len(union_t), "\n\nponton", ponton_t, len(ponton_t), "\nsuper", super_t, len(super_t))
+    print("\n", "union", union_t, len(union_t), "\n\nponton", ponton_t, len(ponton_t), "\nsuper", super_t, len(super_t))
     ("infer", infer_t, len(infer_t))
     # union {'1234': '1234', '12304': '12304', '123004': '123004', '12300004': '12300004', ...] 28
     # ponton {'1234': '1234', '12034': '12034', '120034': '120034', '10234': '10234', ...] 9

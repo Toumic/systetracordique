@@ -10,6 +10,13 @@ from typing import Callable
 # lino() Pour consulter le programme grâce au suivi des print’s
 lineno: Callable[[], int] = lambda: inspect.currentframe().f_back.f_lineno
 
+dict_miroir_org = {
+    "miror": {},
+    "clone": {},
+    "juxta": {},
+    "symet": {},
+    "diato": {}
+}
 
 def globe(glob):
     """ Ce module a une fonction chargée de constituer algorithmiquement la topographie des tétracordes.
@@ -414,17 +421,17 @@ def globe(glob):
     copie_tet = []  # Mémorisation des tétras originaux pour le traitement de la symétrisation.
     quantetra_lis = []  #, quantetra_lis = liste des quantités
     quantetra_key = k_.copy()  #, quantetra_key = liste des clefs tétras
-    dict_miroir_org = {
+    '''dict_miroir_org = {
         "miror" : {},  # Le tétra devant un miroir à effet symétrique
         "clone" : {},  # Le tétra se répète à l'identique. Voir: mem_clone[liste], ligne 200
         "juxta": {},  # Le tétra se répète à l'identique dans une autre échelle[len(tétra)]
         "symet" : {},  # Le tétra est symétrique à lui-même, ligne 309
         "diato": {},  # Le tétra est diatonique à l'original, ligne 344
-    }  # Dico, clef = tétra et valeur = couple tétra aux valeurs symétriques.
+    }  # Dico, clef = tétra et valeur = couple tétra aux valeurs symétriques.'''
     (lineno(), "dict_miroir_org", dict_miroir_org.keys())
     # 380 dict_miroir_org dict_keys(['miror', 'clone', 'juxta', 'symet', 'diato'])
     for k in k_:
-        quantetra_lis.append(len(dict_tet[k]))  #, q_lis = liste des quantités.
+        quantetra_lis.append(len(dict_tet[k]))  #, q_lis = liste des quantités.E
         (lineno(), "k", k, "dict_tet", dict_tet[k], len(dict_tet[k]))
         # 264 k 10000234 dict_tet [('100234', '1000023456078', '12034')] 1
         ("\n", lineno(), "Clef tétra k référence sélection.", k)
@@ -598,6 +605,3 @@ def globe(glob):
      "   Dico : dic_tet_maj 102034 ([0, 0, 0, 0], [1, 3, 5, 6], 6)")
 
     "# Organisation et utilitaires :"
-
-    "# Envoi des données à afficher."
-    tetravisuel.affiche_tetra()

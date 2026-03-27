@@ -15,4 +15,4 @@ def assiste(objet):
 
 if __name__ == '__main__':
     assise = ["systetra.py", "globaliste.py", "tetravisuel.py"]
-    assiste(assise[0])
+    assiste(assise[1])
