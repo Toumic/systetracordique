@@ -195,7 +195,6 @@ def print_hi():
     # La séquence des gammes de di_ages est la même que celle de e_gam.
     "# Collecte des tétras inférieurs et supérieurs de chaque gamme"
     t_inf, t_sup = [], []  # Listes : tétras[inf, sup].
-    # union_t, ponton_t, super_t, infer_t = {}, {}, {}, {}  # , union_t[int, sup], ponton_t[int-sup], super_t[sup] unic
     t_global = {}  # Dictionnaire des localisations tétras.
     for e_num in e_gam:
         nom = n_gam[e_gam.index(e_num)] + "_"
@@ -263,7 +262,7 @@ def print_hi():
             super_t[i_sup] = i_sup
             union_t[i_sup] = i_sup
             (lineno(), "if i_sup in t_inf ", i_sup)
-    print("\n", "union", union_t, len(union_t), "\n\nponton", ponton_t, len(ponton_t), "\nsuper", super_t, len(super_t))
+    ("\n", "union", union_t, len(union_t), "\n\nponton", ponton_t, len(ponton_t), "\nsuper", super_t, len(super_t))
     ("infer", infer_t, len(infer_t))
     # union {'1234': '1234', '12304': '12304', '123004': '123004', '12300004': '12300004', ...] 28
     # ponton {'1234': '1234', '12034': '12034', '120034': '120034', '10234': '10234', ...] 9

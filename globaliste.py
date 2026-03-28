@@ -240,7 +240,6 @@ def globe(glob):
     ("\n", lineno(), "t_visio", t_visio, "\n valeurs", valeurs)
     # 214 t_visio ['1002034', '10002034', '100002034', '12304', '123004', '12034', ...]
     # valeurs {'1234': [('o45x', '1234000005678', 'inf'), ('o45x', '1234000005678', 'sup')...] ...}
-    # i_global[k_glob] = glob['t_global'][k_glob]
 
     "# Continuer à compléter le dictionnaire dict_tet, dans lequel se rangent les éclaircissements."
     for k_vis in t_visio:
@@ -496,7 +495,7 @@ def globe(glob):
     # 444 dict_tet {'1234': [('1234', '1234000005678', '1234'), ('1234', '1234000560078', '120034')...]} 28
     "# 380 dict_miroir_org dict_keys(['miror', 'clone', 'juxta', 'symet', 'diato'])"
     for dmo in dict_miroir_org.keys():
-        print(lineno(), "dmo", dmo, dict_miroir_org[dmo])
+        (lineno(), "dmo", dmo, dict_miroir_org[dmo])
 
     ("# Création d'un dictionnaire dont la clé est la quantité des gammes réunies et la valeur sont les tétras."
      "Quand il y a plusieurs fois une même quantité, on crée des repères indiquants le fait, le reste n'est pas fait."
