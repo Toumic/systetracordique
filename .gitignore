@@ -6,4 +6,4 @@ __pycache__/
 .idea/
 
 # Fichiers générés
-tetracorde.json
+data/tetracorde.json

@@ -1,37 +1,43 @@
 # -*- coding: utf-8 -*-
 # vicenté quantic cabviva
 #
+# Module systetra : extraction, classification et ordonnancement
+# des tétracordes inférieurs et supérieurs.
 
-# Les modules personnels.
-import globaliste
-
+from core import globaliste
 import inspect
 from typing import Callable
 
-# lino() Pour consulter le programme grâce au suivi des print’s
+# lino() : suivi des étapes internes (trace légère, non intrusive)
 lineno: Callable[[], int] = lambda: inspect.currentframe().f_back.f_lineno
 
 # --- dictionnaires visibles depuis l’extérieur ---
-union_t = {}
-ponton_t = {}
-super_t = {}
-infer_t = {}
+union_t = {}     # tétras inf ∪ sup
+ponton_t = {}    # tétras présents en inf ET en sup
+super_t = {}     # tétras uniquement supérieurs
+infer_t = {}     # tétras uniquement inférieurs
 
-# Déclaration des nécessités.
-n_gam = []
-e_gam = []
-t_inf = []
-t_sup = []
-t_global = {}
-t_ordre = {}
+# --- listes et dicos visibles depuis l’extérieur ---
+n_gam = []      # noms des gammes
+e_gam = []      # énumérations des gammes
+g_gam = []      # gammes diatoniques
+t_inf = []      # tétras inférieurs
+t_sup = []      # tétras supérieurs
+t_global = {}   # positions inf/sup dans les gammes
+t_ordre = {}    # ordre croissant des tétras
 
 
-def print_hi():
-    """Traité des tétracordes avec comme unique base une liste de tuples (nom_gam, mod_num).
-        Consulter les tétras de k_gam/mod_num, afin d'en trier ceux qui sont semblables."""
-    "# Déclaration du dictionnaire qui englobe les dictionnaires et les listes tétras."
-    # dico_tetras = {}  # {'k_gam': {}, 'di_ages': {}}
-    "# liste des gammes primordiales énumérées : k_gam."
+def compute_tetras():
+    """Traité des tétracordes basé sur une liste de tuples (nom_gam, mod_num).
+       Produit :
+         - tétras inf/sup
+         - tétras uniques
+         - positions inf/sup
+         - ordre croissant
+       Les résultats sont exportés dans globaliste.globe().
+    """
+
+    # --- 1. Gammes primordiales énumérées ---
     k_gam = [('o45x', '123400000567'), ('o46-', '123400056007'), ('o4', '123400050607'), ('o46+', '123400050067'),
              ('o45-', '123400500607'), ('o54-', '123405000607'), ('*5', '123450000607'), ('-34', '123040050607'),
              ('o63-', '123045000607'), ('o35x', '123004000567'), ('o35+', '123004005607'), ('o3', '123004050607'),
@@ -49,7 +55,8 @@ def print_hi():
              ('x36+', '102000345067'), ('^3', '102000034567'), ('+25x', '100234000567'), ('+26-', '100234056007'),
              ('+2', '100234050607'), ('+26', '100234050067'), ('+25-', '100234500607'), ('+23x', '100200345607'),
              ('x26-', '100023456007'), ('^2', '100002345607')]
-    "# Dico des listes des énumérations diatoniques primordiales : di_ages."
+
+    # --- 2. Énumérations diatoniques primordiales ---
     di_ages = {
         1: ['123400000567', '123000004567', '120000034567', '100000234567', '123456700000', '123456000007',
             '123450000067'],
@@ -184,24 +191,47 @@ def print_hi():
         66: ['100002345607', '123450670000', '123405600007', '123045000067', '120340000567', '102300004567',
              '120000345670']
     }
+
     (lineno(), "di_ages", di_ages)
     # 173 di_ages {1: ['123400000567', '123000004567', '120000034567', '100000234567',...]}
-    global n_gam, e_gam, t_inf, t_sup, t_global, t_ordre
-    n_gam = [n for n, _ in k_gam]  # Liste les noms des gammes.
-    e_gam = [e for _, e in k_gam]  # Liste les gammes énumérées.
-    ("n_gam", n_gam, len(n_gam), "\ne_gam", e_gam, len(e_gam))
-    # n_gam ['o45x', 'o46-', 'o4', 'o46+', 'o45-', 'o54-', '*5', '-34', 'o63-', 'o35x', 'o35+',     66
-    # e_gam ['1234000005678', '1234000560078', '1234000506078', '1234000500678', '1234005006078',        66
-    # La séquence des gammes de di_ages est la même que celle de e_gam.
-    "# Collecte des tétras inférieurs et supérieurs de chaque gamme"
-    t_inf, t_sup = [], []  # Listes : tétras[inf, sup].
-    t_global = {}  # Dictionnaire des localisations tétras.
+
+    # --- 3. Initialisation des listes globales ---
+    global n_gam, e_gam, g_gam, t_inf, t_sup, t_global, t_ordre
+
+    n_gam = [n for n, _ in k_gam]
+    e_gam = [e for _, e in k_gam]
+
+    # Déclaration des notes absolues, des intervalles et des signes.
+    gamme_naturelle = "1020340506078"
+    notes = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C']  # Il nous faut les notes musicales.
+    signes = ['', '+', 'x', '^', '+^', 'x^', 'o*', '-*', '*', 'o', '-']  # signes[0] = pas d'altération.
+    for chi in e_gam:
+        gamme = []
+        for chiffre in chi:
+            if chiffre != "0":
+                indice1 = gamme_naturelle.index(chiffre)
+                indice2 = chi.index(chiffre)
+                result = indice2 - indice1
+                signe_note = signes[result] + notes[int(chiffre) - 1]
+                gamme.append(signe_note)
+        g_gam.append(gamme)
+    (lineno(), "n_gam", n_gam, len(n_gam), "\ne_gam", e_gam, len(e_gam), "\ng_gam", g_gam, len(g_gam))
+
+    # --- 4. Extraction des tétras inf/sup ---
+    t_inf, t_sup = [], []
+    t_global = {}
+
     for e_num in e_gam:
         nom = n_gam[e_gam.index(e_num)] + "_"
-        e_num += "8"
-        inf, sup, gen1, gen2, pos1, pos2 = True, False, "", "", "", ""
+        e_num8 = e_num + "8"
+
+        inf, sup = True, False
+        gen1, gen2 = "", ""
+        pos1, pos2 = "", ""
         tet1, tet2 = 0, 0
-        for e in e_num:
+
+        for e in e_num8:
+            # tétra inférieur
             if inf and tet1 < 5 and int(e) in (0, 1, 2, 3, 4):
                 if int(e) == 0:
                     gen1 += "0"
@@ -209,11 +239,15 @@ def print_hi():
                     tet1 += 1
                     gen1 += str(tet1)
                 if int(e) == 4:
-                    pos1 = nom + e_num + ".inf"
+                    pos1 = nom + e_num8 + ".inf"
                     inf = False
-                ("e_num", e_num, "e", e, "gen1", gen1)
+                (lineno(), "gen1", gen1)
+
+            # passage au tétra supérieur
             if int(e) == 5:
                 sup = True
+
+            # tétra supérieur
             if sup and int(e) in (0, 5, 6, 7, 8):
                 if int(e) == 0:
                     gen2 += "0"
@@ -221,71 +255,58 @@ def print_hi():
                     tet2 += 1
                     gen2 += str(tet2)
                 if int(e) == 8:
-                    pos2 = nom + e_num + ".sup"
-                ("e_num", e_num, "e", e, "\t\t\tgen2", gen2)
+                    pos2 = nom + e_num8 + ".sup"
+                (lineno(), "gen2", gen2)
 
-        # Enregistrement des tétras conformément formés.
-        if gen1 not in t_inf:  # Au niveau du tétra inférieur.
+        # enregistrement
+        if gen1 not in t_inf:
             t_inf.append(gen1)
-        if gen2 not in t_sup:  # Au niveau du tétra supérieur.
+        if gen2 not in t_sup:
             t_sup.append(gen2)
-        "# Établissement des tétras uniques indexés aux noms, aux énumérations et à leurs positions[inf/sup]"
-        # Dictionnaire t_global inf
-        if gen1 not in t_global.keys():
-            t_global[gen1] = [pos1]
-        elif gen1 in t_global.keys():
-            t_global[gen1].append(pos1)
-        # Dictionnaire t_global sup
-        if gen2 not in t_global.keys():
-            t_global[gen2] = [pos2]
-        elif gen2 in t_global.keys():
-            t_global[gen2].append(pos2)
-        # print()
-    (lineno(), t_inf, len(t_inf), "\n", t_sup, len(t_sup), "\n\nt_global", t_global.keys(), len(t_global.keys()))
-    # 230 ['1234', '12304', '123004', '12300004', '12034', '120304'...] 23
-    # ... ['1234', '120034', '102034', '100234', '1002034', '10002034'...] 14
-    # ... t_global dict_keys(['1234', '120034', '102034', '100234', '1002034'...] 28
-    # t_global['1234'] | '1234': ['o45x.1234000005678.inf', 'o45x.1234000005678.sup'
 
-    "# Initialisation du dictionnaire d'unisson des tétracordes_inf et des tétracordes_sup, avec les doublons."
+        # positions inf/sup
+        t_global.setdefault(gen1, []).append(pos1)
+        t_global.setdefault(gen2, []).append(pos2)
+
+    # --- 5. Classification des tétras ---
     for i_inf in t_inf:
         if i_inf in t_sup:
             ponton_t[i_inf] = i_inf
             union_t[i_inf] = i_inf
-            (lineno(), "if i_inf in t_sup ", i_inf)
         else:
             infer_t[i_inf] = i_inf
             union_t[i_inf] = i_inf
-            (lineno(), " * i_inf not in t_sup ", i_inf)
+
     for i_sup in t_sup:
         if i_sup not in t_inf:
             super_t[i_sup] = i_sup
             union_t[i_sup] = i_sup
-            (lineno(), "if i_sup in t_inf ", i_sup)
-    ("\n", "union", union_t, len(union_t), "\n\nponton", ponton_t, len(ponton_t), "\nsuper", super_t, len(super_t))
-    ("infer", infer_t, len(infer_t))
-    # union {'1234': '1234', '12304': '12304', '123004': '123004', '12300004': '12300004', ...] 28
-    # ponton {'1234': '1234', '12034': '12034', '120034': '120034', '10234': '10234', ...] 9
-    # super {'1002034': '1002034', '10002034': '10002034', '100002034': '100002034', ...] 5
-    # infer {'12304': '12304', '123004': '123004', '12300004': '12300004', '120304': '120304', ...] 14
 
-    "# Mise en ordre croissant des tétracordes des clés du dictionnaire union_t."
-    t_ordre = {}  # Dico clé = numéro croissant, valeur = tétra croissant
-    t_or = [int(t) for t in union_t.keys()]
-    t_or.sort()
+    # --- 6. Ordre croissant ---
+    t_ordre = {}
+    t_or = sorted(int(t) for t in union_t.keys())
     t_or = [str(t) for t in t_or]
-    (lineno(), "t_or", t_or, len(t_or))
-    # 263 t_or ['1234', '10234', '12034', '12304', '100234', '102034', '102304',...] 28
-    for t in range(len(t_or)):
-        t_ordre[t + 1] = t_or[t]
-    (lineno(), "t_ordre", t_ordre, len(t_ordre))
-    # 267 t_ordre {1: '1234', 2: '10234', 3: '12034', 4: '12304', 5: '100234', 6: '102034',...] 28
 
-    "À transmettre au module globaliste.py"
-    dico_tetras = {'t_inf': t_inf, 't_sup': t_sup, 't_global': t_global, 'union_t': union_t, 'ponton_t': ponton_t,
-                   'super_t': super_t, 'infer_t': infer_t, 't_ordre': t_ordre}
+    for i, t in enumerate(t_or, start=1):
+        t_ordre[i] = t
+
+    # --- 7. Transmission au module globaliste ---
+    dico_tetras = {
+        't_inf': t_inf,
+        't_sup': t_sup,
+        't_global': t_global,
+        'union_t': union_t,
+        'ponton_t': ponton_t,
+        'super_t': super_t,
+        'infer_t': infer_t,
+        't_ordre': t_ordre
+    }
+    '''dt = dico_tetras['t_ordre']
+    print(dt, len(dt))'''
+
     globaliste.globe(dico_tetras)
+    return dico_tetras
 
 
 if __name__ == '__main__':
-    print_hi()
+    compute_tetras()
