@@ -14,143 +14,503 @@ Description :
 """
 
 import json
-import os
+from pathlib import Path
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
+from typing import Any
 import inspect
-from typing import Callable
-
-# lino() : suivi des étapes internes (trace légère, non intrusive)
-lineno: Callable[[], int] = lambda: inspect.currentframe().f_back.f_lineno
 
 
-def exemple_notes_3d(distri, orgo, ordo):
-    """
-    Exemple simple :
-    - une gamme principale (notes verticales)
-    - une gamme liée placée à droite
-    - des liaisons entre notes identiques
+def debug_line():
+    frame = inspect.currentframe()
+    # noinspection PyUnresolvedReferences
+    return frame.f_back.f_lineno if frame and frame.f_back else -1
 
-    Cet exemple n'utilise aucune donnée JSON.
-    Il sert uniquement à comprendre la mécanique en 3D.
-    """
 
-    # ---------------------------------------------------------
-    # 1) Création de la figure 3D
-    # ---------------------------------------------------------
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
 
-    # ---------------------------------------------------------
-    # Création de la série des tétracordes selon une ordonnance
-    # et un rassemblement général donné.
-    # ---------------------------------------------------------
+def find_index(scale, target):
+    try:
+        return scale.index(target)
+    except ValueError:
+        return None
 
-    # --- État partagé entre les callbacks et la boucle ---
-    etat = {"mode": "original"}  # valeur par défaut
 
-    # --- Bouton ORIGINAL ---
-    ax_button_org = plt.axes((0.1, 0.90, 0.1, 0.05))
-    btn_org = Button(ax_button_org, "Original")
-
-    # --- Bouton ORDINAL ---
-    ax_button_ord = plt.axes((0.2, 0.90, 0.1, 0.05))
-    btn_ord = Button(ax_button_ord, "Ordinal")
-
-    # --- Callback : clic sur ORIGINAL ---
-    def on_original(_):
-        etat["mode"] = "original"
-        print("Mode =", etat["mode"])
-        rafraichir()
-
-    # --- Callback : clic sur ORDINAL ---
-    def on_ordinal(_):
-        etat["mode"] = "ordinal"
-        print("Mode =", etat["mode"])
-        rafraichir()
-
-    btn_org.on_clicked(on_original)
-    btn_ord.on_clicked(on_ordinal)
-
-    # --- Fonction qui redessine selon le mode ---
-    def rafraichir():
-        ax.clear()
-
-        if etat["mode"] == "original":
-            ooo = orgo
+def normalize_5678(segment):
+    out = ""
+    n = 1
+    for ch in segment:
+        if ch == "0":
+            out += "0"
         else:
-            ooo = ordo
+            out += str(n)
+            n += 1
+    return out
 
-        # Construction de la table de lecture.
 
-        for oo in ooo:
-            for odo in distri[oo]:
-                print(lineno(), "oo", oo, "odo", odo)
-                break
+def degree_color(ch):
+    if ch in "1234":
+        return "red"
+    if ch == "0":
+        return "orange"
+    if ch in "5678":
+        return "blue"
+    if ch == "9":
+        return "white"  # invisible
+    return "black"
 
-        print(lineno(), "orgo", orgo, "\ndistri", distri[orgo[0]])
 
-    # ---------------------------------------------------------
-    # 2) Définition des notes (hauteurs arbitraires)
-    #    Dans ton vrai projet, ces valeurs viendront du JSON.
-    # ---------------------------------------------------------
-    notes_principale = [0, 2, 4, 5, 7, 9, 11]      # gamme principale
-    notes_liee = [5, 7, 9, 11, 12, 14, 16]         # gamme liée
+def extract_scale(tetra):
+    for item in tetra:
+        if isinstance(item, str) and len(item) == 13:
+            return item
+    raise ValueError("Aucun degré complet trouvé")
 
-    # Position horizontale (axe X)
-    x_main = 0
-    x_liee = 1.5
 
-    # Position en profondeur (axe Z)
-    # Ici, on reste sur une seule strate (z = 0)
-    z_main = 0
-    z_liee = 0
+scale_registry = {}  # ancien t_traces
+ancien_tetra = ""  # Hiérarchie antérieure
 
-    # ---------------------------------------------------------
-    # 3) Affichage de la gamme principale
-    # ---------------------------------------------------------
-    for h in notes_principale:
-        # Point représentant la note
-        ax.scatter(x_main, h, z_main, s=200, color="orange")
 
-        # Label de la note
-        ax.text(x_main, h, z_main, str(h),
-                ha="center", va="center", fontsize=10)
+def apply_9_mask(scale, mask_chars):
+    # Normalisation : scale peut être un string, un tuple de 1, ou un tuple de 2.
+    if isinstance(scale, str):
+        originals = (scale,)
+    else:
+        originals = tuple(scale)
 
-    # ---------------------------------------------------------
-    # 4) Affichage de la gamme liée
-    # ---------------------------------------------------------
-    for h in notes_liee:
-        ax.scatter(x_liee, h, z_liee, s=200, color="lightgray")
-        ax.text(x_liee, h, z_liee, str(h),
-                ha="center", va="center", fontsize=10)
+    # Fonction interne de masquage
+    def mask_string(s):
+        return "".join("9" if c in mask_chars else c for c in s)
 
-    # ---------------------------------------------------------
-    # 5) Tracer des liaisons entre notes identiques
-    #    Ici : 5, 7, 9, 11 sont communes aux deux gammes.
-    # ---------------------------------------------------------
-    notes_communes = [5, 7, 9, 11]
+    # Masquage de tous les originaux
+    masked = tuple(mask_string(s) for s in originals)
 
-    for h in notes_communes:
-        ax.plot(
-            [x_main, x_liee],   # X : de la gamme principale à la gamme liée
-            [h, h],             # Y : même hauteur
-            [z_main, z_liee],   # Z : même strate
-            color="black",
-            linewidth=2
+    # --- Décision finale ---
+    if len(masked) == 1:
+        # Cas simple : un seul tétra → tuple plat
+        return masked[0], originals[0]
+
+    # Cas multiple : deux tétras → tuple de tuples
+    return masked, originals
+
+
+def find_rich_relation(scale):
+    """Cherche une relation riche dans scale_registry."""
+    global ancien_tetra
+
+    if scale not in scale_registry.keys():
+        return None
+
+    low_idx = scale_registry[scale][0][0]
+    high_idx = scale_registry[scale][1][0]
+    ancien_tetra = ""
+
+    # Déclaration des utilités puisque les deux tétras peuvent déjà être référencés
+    scale1234, s1234, key1 = "", True, ""  # Tétra inférieur
+    scale5678, s5678, key5 = "", True, ""  # Tétra supérieur
+
+    for key, val in scale_registry.items():
+        if key == scale:
+            continue
+
+        if val[0][0] == low_idx and s1234:
+            scale1234, s1234, key1 = scale, False, key
+
+        if val[1][0] == high_idx and s5678:
+            scale5678, s5678, key5 = scale, False, key
+
+        if key1 and key5:
+            break
+
+    if key1 and key5:
+        ancien_tetra = key1, key5
+        return apply_9_mask(ancien_tetra, "12345678")
+    elif key1:
+        ancien_tetra = key1
+        return apply_9_mask(ancien_tetra, "1234")
+    elif key5:
+        ancien_tetra = key5
+        return apply_9_mask(ancien_tetra, "5678")
+
+    return None
+
+
+def draw_scale(scale, y, z, ax):
+    for x, ch in enumerate(scale):
+        col = degree_color(ch)
+        (debug_line(), "scatter:", scale, (x, y, z), "col:", ch, col)
+        ax.scatter(x, y, z, color=col, alpha=1, s=5 if col != "white" else 0)
+
+
+def draw_link(ax, x1, x2, y1, y2, z1, z2, tip):
+    (debug_line(), "link:", (x1, y1, z1), "→", (x2, y2, z2))
+    # Coloration des liaisons
+    if tip == "1":
+        couleur = "green"
+    else:
+        couleur = "black"
+    ax.plot([x1, x2], [y1, y2], [z1, z2], color=couleur, linewidth=0.5)
+
+
+def build_tetra_scene(tetra_groups, key, ax, current_depth):
+    global scale_registry
+
+    sym_scales, joy_pairs, low_scales, high_scales = tetra_groups[key]
+
+    # --- SYM (gamme de référence)
+    if sym_scales:  # not scale_registry
+        ref = sym_scales[0]
+        ref_scale = extract_scale(ref)
+
+        x_sym, y_sym, z_sym = 0, 0, current_depth
+
+        x_low_sym: int | None = find_index(ref_scale, "4")
+        x_high_sym: int | None = find_index(ref_scale, "5")
+
+        trans = normalize_5678(ref_scale[x_high_sym:])
+
+        # SYM enregistré avec Z=0 pour JOY
+        # noinspection PyUnresolvedReferences
+        scale_registry[ref_scale] = (
+            (ref_scale[:x_low_sym + 1], x_low_sym),
+            (trans, x_high_sym),
+            (y_sym, (z_sym, z_sym))
         )
 
-    # ---------------------------------------------------------
-    # 6) Réglages visuels
-    # ---------------------------------------------------------
-    ax.set_xlabel("Position X")
-    ax.set_ylabel("Hauteur (valeurs JSON)")
-    ax.set_zlabel("Strate (Z)")
+        if len(scale_registry) > 1:
 
-    # Optionnel : meilleure lisibilité
-    ax.view_init(elev=20, azim=30)
+            rel = find_rich_relation(ref_scale)  # rel: ('9999000506078', '1234000005678')
+            if rel and isinstance(rel[0], tuple):
+                # Section 1
+                i_xyz1 = scale_registry[rel[1][0]]
+                i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                i_xyz2 = scale_registry[ref_scale]
+                i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
 
-    plt.title("Exemple pédagogique : placement de notes et liaisons en 3D")
+                draw_scale(rel[0][0], y_sym, z_sym, ax)
+                draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "2")
+
+                # Section 2
+                i_xyz1 = scale_registry[rel[1][1]]
+                i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                i_xyz2 = scale_registry[ref_scale]
+                i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                draw_scale(rel[0][1], y_sym, z_sym, ax)
+                draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "2")
+            else:
+                if rel:
+                    i_xyz1 = scale_registry[rel[1]]
+                    i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                    i_xyz2 = scale_registry[ref_scale]
+                    i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                    draw_scale(rel[0], y_sym, z_sym, ax)
+                    draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "1")
+        else:
+            draw_scale(ref_scale, y_sym, z_sym, ax)
+
+    # --- JOY
+    z_joy = current_depth - 1
+    for idx, (low_t, high_t) in enumerate(joy_pairs, start=1):
+
+        # JOY autour du SYM via Y uniquement
+        y_low = idx * 1
+        y_high = -idx * 1
+
+        z_low, z_high = z_joy, z_joy
+
+        low_scale = extract_scale(low_t)
+        high_scale = extract_scale(high_t)
+        (debug_line(), "JOY idx:", idx, "low:", low_scale, "high:", high_scale)
+
+        # --- JOY-INF
+        x_low: int | None = find_index(low_scale, "4")
+        f_low: int | None = find_index(low_scale, "5")
+        if x_low is None or f_low is None:
+            continue
+
+        (debug_line(), "JOY scale_registry:", scale_registry)
+        if low_scale not in scale_registry:
+            trans = normalize_5678(low_scale[f_low:])
+            scale_registry[low_scale] = (
+                (low_scale[:x_low + 1], x_low),
+                (trans, f_low),
+                (y_low, (z_low, z_low))
+            )
+
+            rel = find_rich_relation(low_scale)  # rel: ('9999000506078', '1234000005678')
+            if rel and isinstance(rel[0], tuple):
+                (debug_line(), "REL multiple:", rel)
+                # Section 1
+                i_xyz1 = scale_registry[rel[1][0]]
+                i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                i_xyz2 = scale_registry[low_scale]
+                i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                draw_scale(rel[0][0], y_low, z_low, ax)
+                draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "2")
+
+                # Section 2
+                i_xyz1 = scale_registry[rel[1][1]]
+                i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                i_xyz2 = scale_registry[low_scale]
+                i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                draw_scale(rel[0][1], y_low, z_low, ax)
+                draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "2")
+            else:
+                (debug_line(), "REL simple:", rel)
+                if rel:
+                    i_xyz1 = scale_registry[rel[1]]
+                    i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                    i_xyz2 = scale_registry[low_scale]
+                    i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                    draw_scale(rel[0], y_low, z_low, ax)
+                    draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "1")
+
+        # --- JOY-SUP
+        x_high: int | None = find_index(high_scale, "5")
+        f_high: int | None = find_index(high_scale, "4")
+        if x_high is None or f_high is None:
+            continue
+
+        if high_scale not in scale_registry:
+            trans = normalize_5678(high_scale[x_high:])
+            scale_registry[high_scale] = (
+                (high_scale[:f_high + 1], f_high),
+                (trans, x_high),
+                (y_high, (z_low, z_low))
+            )
+
+            rel = find_rich_relation(high_scale)  # rel: ('9999000506078', '1234000005678')
+            if rel and isinstance(rel[0], tuple):
+                (debug_line(), "REL multiple:", rel)
+                # Section 1
+                i_xyz1 = scale_registry[rel[1][0]]
+                i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                i_xyz2 = scale_registry[high_scale]
+                i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                draw_scale(rel[0][0], y_high, z_high, ax)
+                draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "2")
+
+                # Section 2
+                i_xyz1 = scale_registry[rel[1][1]]
+                i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                i_xyz2 = scale_registry[high_scale]
+                i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                draw_scale(rel[0][1], y_high, z_high, ax)
+                draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "2")
+            else:
+                (debug_line(), "REL simple:", rel)
+                if rel:
+                    s_xyz1 = scale_registry[rel[1]]
+                    s_x1, s_y1, s_z1 = s_xyz1[0][1], s_xyz1[2][0], s_xyz1[2][1][0]
+                    s_xyz2 = scale_registry[high_scale]
+                    s_x2, s_y2, s_z2 = s_xyz2[0][1] + 1, s_xyz2[2][0], s_xyz2[2][1][0]
+
+                    draw_scale(rel[0], y_high, z_high, ax)
+                    draw_link(ax, s_x1, s_x2, s_y1, s_y2, s_z1, s_z2, "1")
+
+    # --- Après la boucle JOY
+    n_joy = len(joy_pairs)
+
+    # Dernières positions Y des JOY
+    last_joy_low_y = +n_joy
+    last_joy_high_y = -n_joy
+
+    # Profondeur progressive
+    z_orphan_base = current_depth - 1
+    z_orphan_step = - 0.1  # Valeur de l'intervalle Z entre les orphelins
+
+    # --- LOW_SCALES
+    for i, lo_t in enumerate(low_scales, start=1):
+        low_scale = extract_scale(lo_t)
+
+        # même colonne Y que JOY-INF
+        y_low_orphan = last_joy_low_y + i
+
+        # descente progressive en 'Z'
+        z_low_orphan = z_orphan_base + i * z_orphan_step
+
+        x_low: int | None = find_index(low_scale, "4")
+        f_low: int | None = find_index(low_scale, "5")
+        if x_low is None or f_low is None:
+            continue
+
+        (debug_line(), "JOY scale_registry:", scale_registry)
+        if low_scale not in scale_registry:
+            trans = normalize_5678(low_scale[f_low:])
+            scale_registry[low_scale] = (
+                (low_scale[:x_low + 1], x_low),
+                (trans, f_low),
+                (y_low_orphan, (z_low_orphan, z_low_orphan))
+            )
+
+            rel = find_rich_relation(low_scale)  # rel: ('9999000506078', '1234000005678')
+            if rel and isinstance(rel[0], tuple):
+                (debug_line(), "REL multiple:", rel)
+                # Section 1
+                i_xyz1 = scale_registry[rel[1][0]]
+                i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                i_xyz2 = scale_registry[low_scale]
+                i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                draw_scale(rel[0][0], y_low_orphan, z_low_orphan, ax)
+                draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "2")
+
+                # Section 2
+                i_xyz1 = scale_registry[rel[1][1]]
+                i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                i_xyz2 = scale_registry[low_scale]
+                i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                draw_scale(rel[0][1], y_low_orphan, z_low_orphan, ax)
+                draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "2")
+            else:
+                (debug_line(), "REL simple:", rel)
+                if rel:
+                    i_xyz1 = scale_registry[rel[1]]
+                    i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                    i_xyz2 = scale_registry[low_scale]
+                    i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                    draw_scale(rel[0], y_low_orphan, z_low_orphan, ax)
+                    draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "1")
+
+    # --- HIGH_SCALES
+    for j, hi_t in enumerate(high_scales, start=1):
+        high_scale = extract_scale(hi_t)
+
+        # même colonne Y que JOY-SUP
+        y_high_orphan = last_joy_high_y - j
+
+        # descente progressive en 'Z'
+        z_high_orphan = z_orphan_base + j * z_orphan_step
+
+        x_high: int | None = find_index(high_scale, "5")
+        f_high: int | None = find_index(high_scale, "4")
+        if x_high is None or f_high is None:
+            continue
+
+        if high_scale not in scale_registry:
+            trans = normalize_5678(high_scale[x_high:])
+            scale_registry[high_scale] = (
+                (high_scale[:f_high + 1], f_high),
+                (trans, x_high),
+                (y_high_orphan, (z_high_orphan, z_high_orphan))
+            )
+
+            rel = find_rich_relation(high_scale)  # rel: ('9999000506078', '1234000005678')
+            if rel and isinstance(rel[0], tuple):
+                (debug_line(), "REL multiple:", rel)
+                # Section 1
+                i_xyz1 = scale_registry[rel[1][0]]
+                i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                i_xyz2 = scale_registry[high_scale]
+                i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                draw_scale(rel[0][0], y_high_orphan, z_high_orphan, ax)
+                draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "2")
+
+                # Section 2
+                i_xyz1 = scale_registry[rel[1][1]]
+                i_x1, i_y1, i_z1 = i_xyz1[1][1], i_xyz1[2][0], i_xyz1[2][1][0]
+                i_xyz2 = scale_registry[high_scale]
+                i_x2, i_y2, i_z2 = i_xyz2[1][1] - 1, i_xyz2[2][0], i_xyz2[2][1][0]
+
+                draw_scale(rel[0][1], y_high_orphan, z_high_orphan, ax)
+                draw_link(ax, i_x1, i_x2, i_y1, i_y2, i_z1, i_z2, "2")
+            else:
+                (debug_line(), "REL simple:", rel)
+                if rel:
+                    s_xyz1 = scale_registry[rel[1]]
+                    s_x1, s_y1, s_z1 = s_xyz1[0][1], s_xyz1[2][0], s_xyz1[2][1][0]
+                    s_xyz2 = scale_registry[high_scale]
+                    s_x2, s_y2, s_z2 = s_xyz2[0][1] + 1, s_xyz2[2][0], s_xyz2[2][1][0]
+
+                    draw_scale(rel[0], y_high_orphan, z_high_orphan, ax)
+                    draw_link(ax, s_x1, s_x2, s_y1, s_y2, s_z1, s_z2, "1")
+
+    # --- FIN de build_tetra_scene
+    depth_used = -(6 + max(len(low_scales), len(high_scales)) * abs(z_orphan_step))
+
+    return current_depth + depth_used
+
+
+def set_equal_aspect_3d(ax):
+    x = ax.get_xlim3d()
+    y = ax.get_ylim3d()
+    z = ax.get_zlim3d()
+
+    dx = float(abs(x[1] - x[0]))
+    dy = float(abs(y[1] - y[0]))
+    dz = float(abs(z[1] - z[0]))
+
+    max_range = max(dx, dy, dz) / 2.0
+
+    mid_x = (x[0] + x[1]) / 2
+    mid_y = (y[0] + y[1]) / 2
+    mid_z = (z[0] + z[1]) / 2
+
+    ax.set_xlim3d(mid_x - max_range, mid_x + max_range)
+    ax.set_ylim3d(mid_y - max_range, mid_y + max_range)
+    ax.set_zlim3d(mid_z - max_range, mid_z + max_range)
+
+
+def run_scene(dict_tet, et1, et2):
+    fig = plt.figure(figsize=(7, 5))
+    plt.tight_layout()
+    ax: Any = fig.add_subplot(111, projection='3d')
+    (et1, et2)
+
+    # Profondeur de base
+    current_depth = 0
+
+    tetra_groups = {}
+
+    clef, cc = [], 0
+
+    for k in dict_tet.keys():
+        sym_scales = []
+        low_scales = []
+        high_scales = []
+        joy_pairs = []
+        clef.append(k)
+        cc += 1
+
+        for entry in dict_tet[k]:
+            if entry[0] == entry[-1] == k:
+                sym_scales.append(entry)
+            elif entry[0] == k:
+                high_scales.append(entry[1:])
+            else:
+                low_scales.append(entry[:2])
+
+        for low in low_scales:
+            for high in high_scales:
+                if low[0] in high:
+                    joy_pairs.append((low, high))
+                    low_scales.remove(low)
+                    high_scales.remove(high)
+
+        tetra_groups[k] = [sym_scales, joy_pairs, low_scales, high_scales]
+
+        current_depth = build_tetra_scene(tetra_groups, k, ax, current_depth)
+
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    # 'elev' = hauteur caméra, 'azim' rotation horizontale
+    ax.view_init(elev=10, azim=-15)
+
+    ax.set_yticks([0])
+    ax.set_yticklabels(["axe k"])
+    ax.set_title(f"Structure tétracordique autour de {clef[0]}")
+
+    set_equal_aspect_3d(ax)
+
     plt.show()
 
 
@@ -161,15 +521,15 @@ def charger_json(nom_fichier):
     """
 
     # Dossier où se trouve ce fichier (matplotlib_visu)
-    dossier_courant = os.path.dirname(__file__)
+    dossier_courant = Path(__file__).parent
 
     # Racine du projet (un niveau au-dessus)
-    racine = os.path.abspath(os.path.join(dossier_courant, ".."))
+    racine = dossier_courant.parent
 
-    # Chemin complet vers json_data/nom_fichier
-    chemin_json = os.path.join(racine, "data", nom_fichier)
+    # Chemin complet vers data/nom_fichier
+    chemin_json = racine / "data" / nom_fichier
 
-    with open(chemin_json, "r", encoding="utf-8") as f:
+    with chemin_json.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -195,11 +555,11 @@ def exemple_chargement():
     k_org = [k for k in gamme['original'].keys()]  # Ordre naturel de la séquence des clés tétras.
     k_ord = [k for k in gamme['ordinal'].keys()]  # Ordre décroissant de la séquence des clés tétras.
 
-    (lineno(), "original", gamme['original'])
-    exemple_notes_3d(gamme['distribution'], k_org, k_ord)
+    (debug_line(), "original", gamme['original'])
+    run_scene(gamme['distribution'], k_org, k_ord)
 
     # dict_keys(['gammes', 'tetrachords', 'positions', 'relations', 'diatonies', 'distribution', 'original', 'ordinal'])
-    (lineno(), "Notes :", gamme['original'])
+    (debug_line(), "Notes :", gamme['original'])
 
 
 if __name__ == "__main__":

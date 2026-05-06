@@ -470,7 +470,7 @@ def globe(glob):
                     # 368 Multi_Clé k 1234 =  dtk ('1234', '1234000005678', '1234') 	retour_tet 0000 1234
         # break  # Traitement de la première clef tétra uniquement
 
-    print(lineno(), "dict_tet", dict_tet, len(k_))
+    (lineno(), "dict_tet", dict_tet, len(k_))
     # 444 dict_tet {'1234': [('1234', '1234000005678', '1234'), ('1234', '1234000560078', '120034')...]} 28
     "# 380 dict_miroir_org dict_keys(['clone', 'juxta', 'symet', 'diato'])"
     for dmo in dict_miroir_org.keys():
